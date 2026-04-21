@@ -1,0 +1,90 @@
+name: 'salesforce_dbt'
+version: '1.0.0'
+config-version: 2
+
+profile: 'salesforce_dbt'
+
+model-paths:    ["models"]
+analysis-paths: ["analyses"]
+test-paths:     ["tests"]
+seed-paths:     ["seeds"]
+macro-paths:    ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# ---------------------------------------------------------------------------
+# Project-wide variables
+# ---------------------------------------------------------------------------
+vars:
+  # Source raw database / schema
+  salesforce_source_database: 'RAW'
+  salesforce_source_schema:   'SALESFORCE'
+
+  # Pipeline source: 'lambda_snowpipe' (custom AWS) or 'fivetran'
+  pipeline_source: 'lambda_snowpipe'
+
+  # Lookback window to catch late-arriving / re-synced records
+  incremental_lookback_days: 3
+
+  # Date spine range for dim_date
+  date_spine_start: '2020-01-01'
+  date_spine_end:   '2030-12-31'
+
+# ---------------------------------------------------------------------------
+# Model configurations
+# ---------------------------------------------------------------------------
+models:
+  salesforce_dbt:
+
+    staging:
+      salesforce:
+        +schema:               stg_salesforce
+        +materialized:         incremental
+        +incremental_strategy: merge
+        +on_schema_change:     sync_all_columns
+        +tags:                 ['staging', 'salesforce']
+        +snowflake_warehouse:  transforming
+
+    intermediate:
+      salesforce:
+        +schema:      intermediate
+        +materialized: ephemeral          # no physical table; inlined at compile
+        +tags:        ['intermediate', 'salesforce']
+
+    marts:
+      core:
+        +schema:      marts_core
+        +materialized: table              # dims are small; full refresh is fine
+        +tags:        ['marts', 'core']
+        +snowflake_warehouse: transforming
+
+      sales:
+        +schema:               marts_sales
+        +materialized:         incremental
+        +incremental_strategy: merge
+        +on_schema_change:     sync_all_columns
+        +tags:                 ['marts', 'sales']
+        +snowflake_warehouse:  transforming
+
+      marketing:
+        +schema:               marts_marketing
+        +materialized:         incremental
+        +incremental_strategy: merge
+        +on_schema_change:     sync_all_columns
+        +tags:                 ['marts', 'marketing']
+        +snowflake_warehouse:  transforming
+
+# ---------------------------------------------------------------------------
+# Snapshot configurations
+# ---------------------------------------------------------------------------
+snapshots:
+  salesforce_dbt:
+    +target_schema:  snapshots
+    +strategy:       timestamp
+    +updated_at:     updated_at           # renamed from system_modstamp in staging
+    +invalidate_hard_deletes: true
+    +snowflake_warehouse: transforming

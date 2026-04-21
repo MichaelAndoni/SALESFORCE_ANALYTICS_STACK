@@ -1,0 +1,37 @@
+version: 2
+
+seeds:
+  - name: salesforce_stage_order
+    description: >
+      Lookup table mapping every Salesforce opportunity stage name to a
+      canonical sort order, category (Early/Middle/Late/Closed), and
+      open/closed/won/lost flags.  Used in pipeline aging and stage
+      progression analysis.
+    config:
+      schema: seeds
+      column_types:
+        stage_order:      integer
+        is_open:          boolean
+        is_closed_won:    boolean
+        is_closed_lost:   boolean
+    columns:
+      - name: stage_name
+        tests: [not_null, unique]
+      - name: stage_order
+        tests: [not_null]
+
+  - name: bookings_targets
+    description: >
+      Quarterly bookings and ARR targets by fiscal quarter.
+      Used in pipeline coverage analysis and bookings vs. target dashboards.
+      Update this seed each planning cycle.
+    config:
+      schema: seeds
+      column_types:
+        bookings_target:     number
+        arr_target:          number
+        new_logo_target:     number
+        expansion_target:    number
+    columns:
+      - name: fiscal_quarter_label
+        tests: [not_null, unique]

@@ -1,0 +1,111 @@
+-- models/staging/salesforce/_sources.yml
+--
+-- Source definitions for the AWS-native Lambda → S3 → Snowpipe pipeline.
+--
+-- These sources point at DEDUPLICATION VIEWS (V_*) in RAW.SALESFORCE,
+-- NOT the underlying append-only tables.  The views return exactly one row
+-- per Salesforce ID (latest SYSTEMMODSTAMP wins), so dbt staging models never
+-- see duplicate rows from Snowpipe's append-only load strategy.
+--
+-- Freshness is checked on _LOAD_TIMESTAMP (Snowpipe ingest time).
+-- Lambda runs hourly; warn after 2 hours (one missed run), error after 6.
+--
+-- If you are using Fivetran/Airbyte instead of the custom Lambda pipeline:
+--   • Change identifier: V_ACCOUNT → account  (remove identifier: lines)
+--   • Change loaded_at_field: _load_timestamp → _fivetran_synced
+--   • Add _fivetran_deleted filter back to staging models
+
+version: 2
+
+sources:
+  - name: salesforce
+    description: >
+      Raw Salesforce data loaded by Lambda (Bulk API 2.0) → S3 → Snowpipe.
+      All objects are surfaced through deduplication views (V_*) in RAW.SALESFORCE
+      that return the latest row per ID. The underlying append-only tables are
+      ACCOUNT, CONTACT, etc. — do not reference them directly from dbt models.
+    database: "{{ var('salesforce_source_database') }}"
+    schema:   "{{ var('salesforce_source_schema') }}"
+    loader: lambda_snowpipe
+
+    freshness:
+      warn_after:  {count: 2,  period: hour}
+      error_after: {count: 6,  period: hour}
+    loaded_at_field: _load_timestamp
+
+    tables:
+
+      - name: account
+        identifier: V_ACCOUNT
+        description: >
+          Deduplicated Salesforce Account records. Latest row per ID by
+          SYSTEMMODSTAMP. ISDELETED=TRUE rows are still present here;
+          they are filtered out in stg_salesforce__accounts.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: contact
+        identifier: V_CONTACT
+        description: Deduplicated Salesforce Contact records.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: lead
+        identifier: V_LEAD
+        description: Deduplicated Salesforce Lead records including conversion metadata.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: opportunity
+        identifier: V_OPPORTUNITY
+        description: >
+          Deduplicated Salesforce Opportunity records. Active and closed deals.
+          The most analytically critical source — drives pipeline, bookings, and win-rate.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: opportunity_line_item
+        identifier: V_OPPORTUNITY_LINE_ITEM
+        description: Deduplicated Opportunity product line items.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: campaign
+        identifier: V_CAMPAIGN
+        description: Deduplicated Salesforce Campaign records.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: campaign_member
+        identifier: V_CAMPAIGN_MEMBER
+        description: Deduplicated Campaign membership junction (Lead or Contact per campaign).
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: task
+        identifier: V_TASK
+        description: Deduplicated activity tasks.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: event
+        identifier: V_EVENT
+        description: Deduplicated calendar events.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: user
+        identifier: V_USER
+        description: Deduplicated Salesforce User records — reps, managers, admins.
+        columns:
+          - name: id
+            tests: [not_null, unique]

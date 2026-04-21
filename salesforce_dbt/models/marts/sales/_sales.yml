@@ -1,0 +1,75 @@
+version: 2
+
+models:
+
+  # --------------------------------------------------------------------------
+  - name: fct_sales_pipeline
+    description: >
+      Active (open) pipeline at Opportunity grain.
+      One row per open opportunity, updated incrementally on each run.
+      Includes probability-weighted amounts, fiscal period, and account
+      segmentation for pipeline coverage and forecast dashboards.
+    columns:
+      - name: pipeline_id
+        tests: [not_null, unique]
+      - name: opportunity_id
+        tests: [not_null, unique]
+      - name: account_sk
+        tests: [not_null]
+      - name: amount
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              severity: warn
+      - name: probability_pct
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+      - name: close_date_id
+        tests: [not_null]
+
+  # --------------------------------------------------------------------------
+  - name: fct_bookings
+    description: >
+      Closed-won bookings ledger at Opportunity grain.
+      One immutable row per won deal.  Drives ARR, TCV, new logo,
+      expansion, and renewal bookings dashboards.
+    columns:
+      - name: booking_id
+        tests: [not_null, unique]
+      - name: opportunity_id
+        tests: [not_null, unique]
+      - name: booking_amount
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: booking_category
+        tests:
+          - accepted_values:
+              values: ['New Logo', 'Renewal', 'Expansion', 'Other']
+      - name: booking_date_id
+        tests: [not_null]
+
+  # --------------------------------------------------------------------------
+  - name: fct_win_rate
+    description: >
+      All closed (won + lost) opportunities for win-rate analysis.
+      Grain: one row per closed opportunity.
+      Slice by rep, team, segment, industry, deal size, lead source,
+      competitor, or fiscal period. Win rate = sum(won_count) / count(*).
+    columns:
+      - name: win_rate_id
+        tests: [not_null, unique]
+      - name: opportunity_id
+        tests: [not_null, unique]
+      - name: is_won
+        tests: [not_null]
+      - name: is_lost
+        tests: [not_null]
+      - name: deal_size_band
+        tests:
+          - accepted_values:
+              values: ['Small  (< $10K)', 'Mid    ($10K–$50K)',
+                       'Large  ($50K–$250K)', 'Enterprise ($250K+)', 'Unknown']

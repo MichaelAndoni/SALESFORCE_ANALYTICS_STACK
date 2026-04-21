@@ -1,0 +1,61 @@
+version: 2
+
+models:
+
+  # --------------------------------------------------------------------------
+  - name: fct_campaign_performance
+    description: >
+      Campaign-grain fact table aggregating reach, engagement, pipeline
+      attribution, and revenue influence.  One row per Campaign.
+      Includes both Salesforce native roll-up fields and independently
+      derived counts from CampaignMember and Opportunity joins, enabling
+      reconciliation between the two.
+
+      Key metrics: response_rate_pct, cost_per_lead, cost_per_opportunity,
+      pipeline_roi, revenue_roi.
+    columns:
+      - name: campaign_performance_id
+        tests: [not_null, unique]
+      - name: campaign_id
+        tests: [not_null, unique]
+      - name: campaign_name
+        tests: [not_null]
+      - name: response_rate_pct
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              severity: warn
+
+  # --------------------------------------------------------------------------
+  - name: fct_demand_generation
+    description: >
+      Full top-of-funnel demand generation funnel at Campaign Member grain.
+      One row per person × campaign interaction (Lead or Contact).
+
+      Tracks the complete journey: campaign touch → MQL (responded) →
+      SQL (opportunity created) → Customer (opportunity won).
+
+      Use for funnel conversion rates, stage velocity, multi-touch attribution,
+      and cost-per-stage efficiency analysis.
+
+      is_mql  = has_responded (marketing qualified)
+      is_sql  = has an attributed closed or open opportunity
+      is_customer = attributed opportunity is won
+    columns:
+      - name: demand_gen_id
+        tests: [not_null, unique]
+      - name: campaign_member_id
+        tests: [not_null, unique]
+      - name: campaign_id
+        tests: [not_null]
+      - name: member_type
+        tests:
+          - accepted_values:
+              values: ['Lead', 'Contact']
+      - name: is_mql
+        tests: [not_null]
+      - name: is_sql
+        tests: [not_null]
+      - name: is_customer
+        tests: [not_null]

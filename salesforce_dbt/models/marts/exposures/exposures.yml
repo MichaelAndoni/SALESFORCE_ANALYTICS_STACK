@@ -1,0 +1,228 @@
+version: 2
+
+# exposures.yml
+#
+# Exposures document which external tools, dashboards, and applications
+# consume the dbt mart tables.  They appear in `dbt docs` as nodes in the
+# lineage graph, showing the full path from Salesforce API → mart → dashboard.
+#
+# Best practice: one exposure per distinct analytical product or consumer.
+# Update this file when new dashboards or tools are connected to the marts.
+
+exposures:
+
+  # --------------------------------------------------------------------------
+  # Sales dashboards
+  # --------------------------------------------------------------------------
+
+  - name: sales_pipeline_dashboard
+    label: "Sales Pipeline Dashboard"
+    type: dashboard
+    maturity: high
+    description: >
+      Executive and rep-facing pipeline coverage dashboard.
+      Shows open pipeline by stage, weighted forecast, close-date distribution,
+      and stale deal flags.  Refreshed every hour when the dbt pipeline runs.
+    depends_on:
+      - ref('fct_sales_pipeline')
+      - ref('dim_account')
+      - ref('dim_user')
+      - ref('dim_date')
+    owner:
+      name: Revenue Operations
+      email: revops@yourcompany.com
+    tags: [sales, pipeline, executive]
+    url: "https://yourbi.tool/dashboards/sales-pipeline"
+
+  - name: bookings_dashboard
+    label: "Bookings & ARR Dashboard"
+    type: dashboard
+    maturity: high
+    description: >
+      Finance and sales leadership view of closed-won bookings.
+      Tracks ARR booked, TCV, booking category (New Logo / Renewal / Expansion),
+      and attainment vs. quarterly targets from the bookings_targets seed.
+    depends_on:
+      - ref('fct_bookings')
+      - ref('dim_account')
+      - ref('dim_user')
+      - ref('dim_date')
+      - ref('bookings_targets')
+    owner:
+      name: Finance
+      email: finance@yourcompany.com
+    tags: [sales, bookings, arr, finance]
+    url: "https://yourbi.tool/dashboards/bookings"
+
+  - name: win_rate_dashboard
+    label: "Win/Loss Analysis Dashboard"
+    type: dashboard
+    maturity: medium
+    description: >
+      Win-rate analysis across rep, team, segment, industry, deal size,
+      lead source, and competitor.  Includes stage-regression and
+      velocity (days-to-close) analysis.
+    depends_on:
+      - ref('fct_win_rate')
+      - ref('dim_account')
+      - ref('dim_user')
+      - ref('dim_date')
+    owner:
+      name: Revenue Operations
+      email: revops@yourcompany.com
+    tags: [sales, win_rate, analysis]
+    url: "https://yourbi.tool/dashboards/win-rate"
+
+  - name: forecast_model
+    label: "Sales Forecast Model"
+    type: ml
+    maturity: medium
+    description: >
+      Statistical forecast model using historical pipeline snapshots from
+      snap_salesforce__opportunities and current fct_sales_pipeline.
+      Outputs a quarterly ARR forecast confidence interval.
+      Runs daily via a separate SageMaker job.
+    depends_on:
+      - ref('fct_sales_pipeline')
+      - ref('fct_bookings')
+      - ref('snap_salesforce__opportunities')
+      - ref('dim_date')
+    owner:
+      name: Data Science
+      email: datascience@yourcompany.com
+    tags: [sales, forecast, ml]
+
+  # --------------------------------------------------------------------------
+  # Marketing dashboards
+  # --------------------------------------------------------------------------
+
+  - name: campaign_performance_dashboard
+    label: "Campaign Performance Dashboard"
+    type: dashboard
+    maturity: high
+    description: >
+      Marketing ops view of campaign effectiveness: response rates, cost per
+      lead, pipeline ROI, and revenue ROI.  Reconciles Salesforce roll-up
+      fields against independently derived counts to surface discrepancies.
+    depends_on:
+      - ref('fct_campaign_performance')
+      - ref('dim_campaign')
+      - ref('dim_date')
+    owner:
+      name: Marketing Operations
+      email: mktg-ops@yourcompany.com
+    tags: [marketing, campaigns, roi]
+    url: "https://yourbi.tool/dashboards/campaigns"
+
+  - name: demand_generation_funnel
+    label: "Demand Generation Funnel"
+    type: dashboard
+    maturity: high
+    description: >
+      Full top-of-funnel view: MQL → SQL → Opportunity → Customer conversion
+      rates by channel, campaign type, lead source, and rep.
+      Includes velocity metrics (days from touch to each funnel stage).
+    depends_on:
+      - ref('fct_demand_generation')
+      - ref('dim_campaign')
+      - ref('dim_lead')
+      - ref('dim_date')
+    owner:
+      name: Demand Generation
+      email: demandgen@yourcompany.com
+    tags: [marketing, demand_gen, funnel]
+    url: "https://yourbi.tool/dashboards/demand-gen"
+
+  - name: marketing_attribution_report
+    label: "Marketing Attribution Report"
+    type: analysis
+    maturity: low
+    description: >
+      Weekly attribution analysis connecting campaign touches to won opportunities.
+      Multi-touch attribution (first touch, last touch, linear) computed from
+      fct_demand_generation joined to fct_bookings.
+      Currently a manual report — automation planned for Q3.
+    depends_on:
+      - ref('fct_demand_generation')
+      - ref('fct_bookings')
+      - ref('dim_campaign')
+    owner:
+      name: Marketing Analytics
+      email: mktg-analytics@yourcompany.com
+    tags: [marketing, attribution]
+
+  # --------------------------------------------------------------------------
+  # Operational / cross-functional
+  # --------------------------------------------------------------------------
+
+  - name: account_health_report
+    label: "Account Health Report"
+    type: dashboard
+    maturity: medium
+    description: >
+      Customer Success view of account health: open opportunities, recent
+      activity tasks, contacts on the account, and firmographic segmentation.
+      Combines dim_account with fct_sales_pipeline and task/event counts.
+    depends_on:
+      - ref('dim_account')
+      - ref('dim_contact')
+      - ref('fct_sales_pipeline')
+      - ref('fct_bookings')
+    owner:
+      name: Customer Success
+      email: cs@yourcompany.com
+    tags: [accounts, cs, health]
+
+  - name: crm_data_quality_report
+    label: "CRM Data Quality Report"
+    type: dashboard
+    maturity: medium
+    description: >
+      Internal RevOps report surfacing data hygiene issues in Salesforce:
+      opportunities without close dates, missing lead sources, contacts
+      without email, and accounts without ARR.
+      Powered by dbt test results and singular test output tables.
+    depends_on:
+      - ref('fct_sales_pipeline')
+      - ref('dim_account')
+      - ref('dim_contact')
+      - ref('dim_lead')
+    owner:
+      name: Revenue Operations
+      email: revops@yourcompany.com
+    tags: [data_quality, operations]
+
+  - name: rep_scorecard
+    label: "Sales Rep Scorecard"
+    type: dashboard
+    maturity: medium
+    description: >
+      Individual contributor scorecard: pipeline coverage, quota attainment,
+      win rate, average deal size, and activity metrics per rep.
+      Consumed by both the BI tool and a Salesforce-embedded iframe.
+    depends_on:
+      - ref('fct_sales_pipeline')
+      - ref('fct_bookings')
+      - ref('fct_win_rate')
+      - ref('dim_user')
+      - ref('dim_date')
+    owner:
+      name: Sales Operations
+      email: sales-ops@yourcompany.com
+    tags: [sales, reps, scorecard]
+    url: "https://yourbi.tool/dashboards/rep-scorecard"
+
+  - name: snowflake_cost_report
+    label: "Snowflake Cost & Usage Report"
+    type: analysis
+    maturity: low
+    description: >
+      Internal infrastructure cost tracking using Snowflake's
+      ACCOUNT_USAGE.QUERY_HISTORY and WAREHOUSE_METERING_HISTORY.
+      Not directly derived from dbt models — references Snowflake system views.
+      Listed here for completeness in the lineage graph.
+    depends_on: []
+    owner:
+      name: Data Engineering
+      email: data-eng@yourcompany.com
+    tags: [infrastructure, cost]

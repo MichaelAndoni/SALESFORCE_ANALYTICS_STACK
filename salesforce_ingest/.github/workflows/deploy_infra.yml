@@ -1,0 +1,218 @@
+# .github/workflows/deploy_infra.yml
+#
+# Deploys the Salesforce ingest CDK stack to AWS.
+#
+# Triggers:
+#   • Push to main:  deploys to PROD (requires manual approval via environment protection)
+#   • Push to dev/*: deploys to DEV  (auto-approved)
+#   • PR against main: runs cdk diff only (no deploy)
+#   • Manual dispatch: choose env and optionally force full-refresh
+#
+# Required GitHub secrets:
+#   AWS_ROLE_ARN_DEV     — OIDC-federated role ARN for dev account
+#   AWS_ROLE_ARN_PROD    — OIDC-federated role ARN for prod account
+#   SF_INSTANCE_URL      — https://yourorg.my.salesforce.com
+#   SF_USERNAME          — service account email
+#   SF_CLIENT_ID         — Connected App consumer key
+#   SNOWFLAKE_ACCOUNT    — xy12345.us-east-1
+#   SNOWFLAKE_USER       — dbt_loader
+#
+# Auth pattern: OIDC (no long-lived AWS keys stored in GitHub)
+#   aws-actions/configure-aws-credentials with role-to-assume.
+
+name: Deploy Ingest Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+      - 'dev/**'
+    paths:
+      - 'cdk/**'
+      - 'lambda/**'
+      - 'glue/**'
+      - '.github/workflows/deploy_infra.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cdk/**'
+      - 'lambda/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, prod]
+      action:
+        description: 'CDK action'
+        required: true
+        default: 'deploy'
+        type: choice
+        options: [diff, deploy, destroy]
+
+env:
+  PYTHON_VERSION: '3.12'
+  CDK_VERSION:    '2.170.0'
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Determine environment and action from trigger context
+  # --------------------------------------------------------------------------
+  setup:
+    name: Resolve environment
+    runs-on: ubuntu-latest
+    outputs:
+      env_name: ${{ steps.resolve.outputs.env_name }}
+      action:   ${{ steps.resolve.outputs.action }}
+      role_arn: ${{ steps.resolve.outputs.role_arn }}
+
+    steps:
+      - name: Resolve environment and action
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+            ACTION="${{ github.event.inputs.action }}"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ENV="prod"
+            ACTION="deploy"
+          elif [[ "${{ github.ref }}" == refs/heads/dev/* ]]; then
+            ENV="dev"
+            ACTION="deploy"
+          else
+            # PR — diff only, no deploy
+            ENV="dev"
+            ACTION="diff"
+          fi
+
+          echo "env_name=$ENV"  >> $GITHUB_OUTPUT
+          echo "action=$ACTION" >> $GITHUB_OUTPUT
+
+          if [ "$ENV" = "prod" ]; then
+            echo "role_arn=${{ secrets.AWS_ROLE_ARN_PROD }}" >> $GITHUB_OUTPUT
+          else
+            echo "role_arn=${{ secrets.AWS_ROLE_ARN_DEV }}"  >> $GITHUB_OUTPUT
+          fi
+
+  # --------------------------------------------------------------------------
+  # Lint the Lambda code
+  # --------------------------------------------------------------------------
+  lint:
+    name: Lint Lambda & Glue code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install linters
+        run: pip install ruff mypy boto3-stubs
+
+      - name: Ruff lint
+        run: ruff check lambda/ glue/ scripts/
+
+      - name: Type check
+        run: mypy lambda/extractor/handler.py lambda/extractor/watermark.py
+        continue-on-error: true   # warn only; don't block on type errors
+
+  # --------------------------------------------------------------------------
+  # Unit tests for the Lambda extractor
+  # --------------------------------------------------------------------------
+  test:
+    name: Lambda unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r lambda/extractor/requirements.txt
+          pip install pytest pytest-mock moto[s3,ssm,secretsmanager]
+
+      - name: Run tests
+        run: pytest tests/unit/ -v --tb=short
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+
+  # --------------------------------------------------------------------------
+  # CDK diff / deploy
+  # --------------------------------------------------------------------------
+  cdk:
+    name: CDK ${{ needs.setup.outputs.action }} (${{ needs.setup.outputs.env_name }})
+    runs-on: ubuntu-latest
+    needs: [setup, lint, test]
+    environment: ${{ needs.setup.outputs.env_name }}   # triggers branch protection for prod
+    permissions:
+      id-token: write   # required for OIDC
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Node (CDK CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CDK CLI
+        run: npm install -g aws-cdk@${{ env.CDK_VERSION }}
+
+      - name: Install Python dependencies
+        working-directory: cdk
+        run: pip install -r requirements.txt
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.setup.outputs.role_arn }}
+          aws-region:     us-east-1
+
+      - name: CDK diff
+        working-directory: cdk
+        run: |
+          cdk diff \
+            --context env=${{ needs.setup.outputs.env_name }} \
+            --context sf_instance_url="${{ secrets.SF_INSTANCE_URL }}" \
+            --context sf_username="${{ secrets.SF_USERNAME }}" \
+            --context sf_client_id="${{ secrets.SF_CLIENT_ID }}" \
+            --context snowflake_account="${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --context snowflake_user="${{ secrets.SNOWFLAKE_USER }}"
+
+      - name: CDK deploy
+        if: needs.setup.outputs.action == 'deploy'
+        working-directory: cdk
+        run: |
+          cdk deploy \
+            --require-approval never \
+            --context env=${{ needs.setup.outputs.env_name }} \
+            --context sf_instance_url="${{ secrets.SF_INSTANCE_URL }}" \
+            --context sf_username="${{ secrets.SF_USERNAME }}" \
+            --context sf_client_id="${{ secrets.SF_CLIENT_ID }}" \
+            --context snowflake_account="${{ secrets.SNOWFLAKE_ACCOUNT }}" \
+            --context snowflake_user="${{ secrets.SNOWFLAKE_USER }}" \
+            --outputs-file cdk-outputs.json
+
+      - name: Upload CDK outputs
+        if: needs.setup.outputs.action == 'deploy'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdk-outputs-${{ needs.setup.outputs.env_name }}
+          path: cdk/cdk-outputs.json
+          retention-days: 30

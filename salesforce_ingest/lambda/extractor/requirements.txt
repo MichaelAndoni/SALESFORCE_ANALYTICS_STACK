@@ -1,0 +1,11 @@
+# lambda/extractor/requirements.txt
+#
+# Pin versions tightly for reproducible Lambda deployments.
+# Build with:  pip install -r requirements.txt -t ./package/ --platform mlinux_2_x86_64 --only-binary=:all:
+
+requests==2.32.3
+PyJWT==2.9.0
+cryptography==43.0.3
+
+# No boto3 — provided by the Lambda runtime; pinning it bloats the package
+# and can cause version conflicts with the runtime's botocore.

@@ -1,0 +1,96 @@
+-- models/staging/salesforce/_sources.yml  (UPDATED for AWS-native pipeline)
+--
+-- IMPORTANT CHANGE FROM FIVETRAN VERSION:
+-- Tables are replaced by dedup VIEWS (V_ACCOUNT, V_OPPORTUNITY, etc.)
+-- The views live in RAW.SALESFORCE and return exactly one row per Salesforce ID
+-- (latest SYSTEMMODSTAMP wins), protecting dbt from Snowpipe's append-only
+-- behaviour without requiring any schema change in the staging models.
+--
+-- Freshness check uses _LOAD_TIMESTAMP (when Snowpipe ingested the file)
+-- rather than a Fivetran-specific column.
+
+version: 2
+
+sources:
+  - name: salesforce
+    description: >
+      Raw Salesforce data loaded by Lambda (Bulk API 2.0) → S3 → Snowpipe.
+      All objects are surfaced through deduplication views (V_*) that return
+      the latest row per Salesforce ID.  The underlying append-only tables are
+      in RAW.SALESFORCE; do not reference them directly from dbt.
+    database: "{{ var('salesforce_source_database') }}"   # RAW
+    schema:   "{{ var('salesforce_source_schema') }}"     # SALESFORCE
+    loader: lambda_snowpipe
+
+    freshness:
+      warn_after:  {count: 2,  period: hour}    # Lambda runs hourly; 2h = one missed run
+      error_after: {count: 6,  period: hour}
+    loaded_at_field: _load_timestamp              # Snowpipe ingest timestamp
+
+    tables:
+      # ── Views (dedup layer over Snowpipe-appended tables) ────────────────
+      - name: account
+        identifier: V_ACCOUNT                    # points at the dedup view
+        description: >
+          Deduplicated Salesforce Account records. Latest row per ID by
+          SYSTEMMODSTAMP. Soft-deletes (ISDELETED=TRUE) still present;
+          filtered in stg_salesforce__accounts.
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: contact
+        identifier: V_CONTACT
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: lead
+        identifier: V_LEAD
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: opportunity
+        identifier: V_OPPORTUNITY
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: opportunity_line_item
+        identifier: V_OPPORTUNITY_LINE_ITEM
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: campaign
+        identifier: V_CAMPAIGN
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: campaign_member
+        identifier: V_CAMPAIGN_MEMBER
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: task
+        identifier: V_TASK
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: event
+        identifier: V_EVENT
+        columns:
+          - name: id
+            tests: [not_null, unique]
+
+      - name: user
+        identifier: V_USER
+        columns:
+          - name: id
+            tests: [not_null, unique]
+          - name: email
+            tests: [not_null]

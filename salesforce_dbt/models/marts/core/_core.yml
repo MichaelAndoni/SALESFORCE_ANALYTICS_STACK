@@ -1,0 +1,75 @@
+version: 2
+
+models:
+
+  # --------------------------------------------------------------------------
+  - name: dim_account
+    description: >
+      Current-state Account dimension with firmographic segmentation,
+      geographic attributes, ownership, and parent hierarchy (one level).
+      For point-in-time history use snap_salesforce__accounts.
+    columns:
+      - name: account_sk
+        tests: [not_null, unique]
+      - name: account_id
+        tests: [not_null, unique]
+      - name: account_name
+        tests: [not_null]
+      - name: employee_segment
+        tests:
+          - accepted_values:
+              values: ['SMB', 'Mid-Market', 'Enterprise', 'Strategic', 'Unknown']
+      - name: revenue_segment
+        tests:
+          - accepted_values:
+              values: ['SMB', 'Mid-Market', 'Enterprise', 'Strategic', 'Unknown']
+
+  # --------------------------------------------------------------------------
+  - name: dim_contact
+    description: Current-state Contact dimension joined to account and owner.
+    columns:
+      - name: contact_sk
+        tests: [not_null, unique]
+      - name: contact_id
+        tests: [not_null, unique]
+
+  # --------------------------------------------------------------------------
+  - name: dim_lead
+    description: >
+      Current-state Lead dimension with enriched campaign attribution and
+      conversion metadata.
+    columns:
+      - name: lead_sk
+        tests: [not_null, unique]
+      - name: lead_id
+        tests: [not_null, unique]
+
+  # --------------------------------------------------------------------------
+  - name: dim_user
+    description: Salesforce User (sales rep, manager, admin) dimension.
+    columns:
+      - name: user_sk
+        tests: [not_null, unique]
+      - name: user_id
+        tests: [not_null, unique]
+      - name: email
+        tests: [not_null, unique]
+
+  # --------------------------------------------------------------------------
+  - name: dim_campaign
+    description: Campaign dimension with budget, schedule, and channel metadata.
+    columns:
+      - name: campaign_sk
+        tests: [not_null, unique]
+      - name: campaign_id
+        tests: [not_null, unique]
+
+  # --------------------------------------------------------------------------
+  - name: dim_date
+    description: >
+      Calendar dimension spanning date_spine_start to date_spine_end.
+      Includes fiscal calendar attributes, rolling period helpers, and
+      boolean flags.  Primary key is date_id (date).
+    columns:
+      - name: date_id
+        tests: [not_null, unique]

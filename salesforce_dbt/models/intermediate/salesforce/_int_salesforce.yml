@@ -1,0 +1,18 @@
+version: 2
+
+models:
+  - name: int_salesforce__opportunity_enriched
+    description: >
+      Opportunity joined to account, owner, campaign, and line-item aggregates.
+      Ephemeral — inlined into downstream marts at compile time.
+    columns:
+      - name: opportunity_id
+        tests: [not_null, unique]
+
+  - name: int_salesforce__lead_enriched
+    description: >
+      Lead joined to owner and campaign attribution (original + most recent touch).
+      Ephemeral — inlined into downstream marts at compile time.
+    columns:
+      - name: lead_id
+        tests: [not_null, unique]

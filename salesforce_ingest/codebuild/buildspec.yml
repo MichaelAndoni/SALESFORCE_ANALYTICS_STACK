@@ -1,0 +1,192 @@
+# codebuild/buildspec.yml
+#
+# AWS CodeBuild buildspec for running dbt inside the pipeline.
+#
+# This buildspec is referenced by the CodeBuild project provisioned in the
+# CDK stack.  It:
+#   1. Installs dbt-snowflake into a cached virtual environment
+#   2. Writes profiles.yml from Secrets Manager credentials
+#   3. Runs the dbt command passed as environment variables from the Lambda
+#   4. Exports result counts as CodeBuild exported variables (visible in SFN)
+#   5. Uploads dbt artifacts (manifest, run_results) to S3 for state comparison
+#
+# Environment variables injected by CodeBuild project / Lambda override:
+#   DBT_COMMAND          — dbt command: build | run | test | snapshot
+#   DBT_SELECT           — optional --select expression (empty = all models)
+#   DBT_TARGET           — dbt --target: prod | dev
+#   SFN_EXECUTION        — Step Functions execution name (for tagging)
+#   SNOWFLAKE_SECRET_ARN — Secrets Manager ARN for dbt Snowflake credentials
+#   S3_ARTIFACTS_BUCKET  — S3 bucket for dbt manifest upload (slim CI state)
+#   DBT_REPO_URL         — Git repo URL (CodeBuild source handles clone)
+#   DBT_FULL_REFRESH     — "true" to add --full-refresh flag
+
+version: 0.2
+
+env:
+  exported-variables:
+    - DBT_MODELS_BUILT
+    - DBT_TESTS_PASSED
+    - DBT_TESTS_FAILED
+    - DBT_RUN_STATUS
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      # Use a pip cache to speed up repeated builds
+      - pip install --quiet --upgrade pip
+      - pip install --quiet dbt-snowflake==1.8.0 jq
+
+  pre_build:
+    commands:
+      # ── Write dbt profiles.yml from Secrets Manager ─────────────────────
+      - |
+        SECRET=$(aws secretsmanager get-secret-value \
+          --secret-id "$SNOWFLAKE_SECRET_ARN" \
+          --query SecretString --output text)
+
+        ACCOUNT=$(echo $SECRET  | jq -r '.account')
+        USER=$(echo $SECRET     | jq -r '.user')
+        PASSWORD=$(echo $SECRET | jq -r '.password // empty')
+        PRIVATE_KEY=$(echo $SECRET | jq -r '.private_key_pem // empty')
+
+        mkdir -p ~/.dbt
+
+        if [ -n "$PRIVATE_KEY" ]; then
+          # Key-pair auth
+          echo "$PRIVATE_KEY" > /tmp/dbt_private_key.pem
+          KEY_AUTH="private_key_path: /tmp/dbt_private_key.pem"
+          AUTH_LINE="$KEY_AUTH"
+        else
+          AUTH_LINE="password: $PASSWORD"
+        fi
+
+        cat > ~/.dbt/profiles.yml << EOF
+        salesforce_dbt:
+          target: ${DBT_TARGET:-prod}
+          outputs:
+            prod:
+              type:       snowflake
+              account:    $ACCOUNT
+              user:       $USER
+              $AUTH_LINE
+              role:       TRANSFORMER
+              database:   ANALYTICS
+              warehouse:  TRANSFORMING
+              schema:     dbt_prod
+              threads:    8
+              query_tag:  "codebuild_${SFN_EXECUTION:-manual}"
+            dev:
+              type:       snowflake
+              account:    $ACCOUNT
+              user:       $USER
+              $AUTH_LINE
+              role:       TRANSFORMER_DEV
+              database:   ANALYTICS_DEV
+              warehouse:  TRANSFORMING_DEV
+              schema:     dbt_dev
+              threads:    4
+              query_tag:  "codebuild_dev_${SFN_EXECUTION:-manual}"
+        EOF
+
+      # ── Install dbt packages ─────────────────────────────────────────────
+      - dbt deps --quiet
+
+      # ── Download previous manifest for slim CI state comparison ──────────
+      - |
+        if [ -n "$S3_ARTIFACTS_BUCKET" ]; then
+          aws s3 cp \
+            s3://${S3_ARTIFACTS_BUCKET}/dbt-state/${DBT_TARGET}/manifest.json \
+            ./prev_state/manifest.json \
+            --quiet 2>/dev/null && echo "Previous manifest downloaded" \
+            || echo "No previous manifest — first run"
+        fi
+
+  build:
+    commands:
+      # ── Seed reference data ──────────────────────────────────────────────
+      - dbt seed --quiet --target ${DBT_TARGET:-prod}
+
+      # ── Run snapshots before marts ───────────────────────────────────────
+      - |
+        if [ "${DBT_COMMAND}" = "build" ] || [ "${DBT_COMMAND}" = "snapshot" ]; then
+          dbt snapshot --target ${DBT_TARGET:-prod}
+        fi
+
+      # ── Main dbt command ─────────────────────────────────────────────────
+      - |
+        CMD="dbt ${DBT_COMMAND:-build} --target ${DBT_TARGET:-prod}"
+
+        if [ -n "${DBT_SELECT}" ]; then
+          CMD="$CMD --select ${DBT_SELECT}"
+        fi
+
+        if [ "${DBT_FULL_REFRESH}" = "true" ]; then
+          CMD="$CMD --full-refresh"
+        fi
+
+        echo "Executing: $CMD"
+        $CMD
+        DBT_EXIT=$?
+
+        # ── Parse run_results.json for exported metrics ───────────────────
+        if [ -f target/run_results.json ]; then
+          DBT_MODELS_BUILT=$(jq '[.results[] | select(.node.resource_type == "model")] | length' target/run_results.json)
+          DBT_TESTS_PASSED=$(jq '[.results[] | select(.node.resource_type == "test" and .status == "pass")] | length' target/run_results.json)
+          DBT_TESTS_FAILED=$(jq '[.results[] | select(.node.resource_type == "test" and (.status == "fail" or .status == "error"))] | length' target/run_results.json)
+        else
+          DBT_MODELS_BUILT=0
+          DBT_TESTS_PASSED=0
+          DBT_TESTS_FAILED=0
+        fi
+
+        if [ $DBT_EXIT -eq 0 ]; then
+          DBT_RUN_STATUS="SUCCESS"
+        else
+          DBT_RUN_STATUS="FAILED"
+        fi
+
+        # Export for CodeBuild exported-variables
+        export DBT_MODELS_BUILT DBT_TESTS_PASSED DBT_TESTS_FAILED DBT_RUN_STATUS
+
+        echo "Models built:  $DBT_MODELS_BUILT"
+        echo "Tests passed:  $DBT_TESTS_PASSED"
+        echo "Tests failed:  $DBT_TESTS_FAILED"
+        echo "dbt status:    $DBT_RUN_STATUS"
+
+        # Propagate dbt exit code so CodeBuild marks build as FAILED
+        exit $DBT_EXIT
+
+  post_build:
+    commands:
+      # ── Upload manifest to S3 for next run's state comparison ────────────
+      - |
+        if [ -n "$S3_ARTIFACTS_BUCKET" ] && [ -f target/manifest.json ]; then
+          aws s3 cp target/manifest.json \
+            s3://${S3_ARTIFACTS_BUCKET}/dbt-state/${DBT_TARGET}/manifest.json \
+            --quiet
+          echo "Manifest uploaded to S3"
+        fi
+
+      # ── Upload run_results for observability ─────────────────────────────
+      - |
+        if [ -n "$S3_ARTIFACTS_BUCKET" ] && [ -f target/run_results.json ]; then
+          TIMESTAMP=$(date -u +%Y%m%dT%H%M%S)
+          aws s3 cp target/run_results.json \
+            s3://${S3_ARTIFACTS_BUCKET}/dbt-runs/${DBT_TARGET}/${TIMESTAMP}/run_results.json \
+            --quiet
+        fi
+
+artifacts:
+  files:
+    - target/manifest.json
+    - target/run_results.json
+    - target/catalog.json
+  discard-paths: false
+  base-directory: .
+
+cache:
+  paths:
+    - /root/.cache/pip/**/*
+    - dbt_packages/**/*

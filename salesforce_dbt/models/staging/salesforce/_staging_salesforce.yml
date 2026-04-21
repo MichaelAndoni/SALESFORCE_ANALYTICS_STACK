@@ -1,0 +1,111 @@
+version: 2
+
+models:
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__accounts
+    description: >
+      Cleaned, renamed, and type-cast Salesforce Account records.
+      Deleted records are excluded. Incrementally updated on system_modstamp.
+    columns:
+      - name: account_id
+        tests: [not_null, unique]
+      - name: account_name
+        tests: [not_null]
+      - name: owner_id
+        tests: [not_null]
+      - name: updated_at
+        tests: [not_null]
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__contacts
+    description: Cleaned Salesforce Contact records.
+    columns:
+      - name: contact_id
+        tests: [not_null, unique]
+      - name: account_id
+        tests: [not_null]
+      - name: updated_at
+        tests: [not_null]
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__leads
+    description: Cleaned Salesforce Lead records including conversion metadata.
+    columns:
+      - name: lead_id
+        tests: [not_null, unique]
+      - name: updated_at
+        tests: [not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['Open - Not Contacted', 'Working - Contacted',
+                       'Closed - Not Converted', 'Closed - Converted',
+                       'Nurturing']
+              severity: warn
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__opportunities
+    description: Cleaned Salesforce Opportunity records.
+    columns:
+      - name: opportunity_id
+        tests: [not_null, unique]
+      - name: account_id
+        tests: [not_null]
+      - name: close_date
+        tests: [not_null]
+      - name: stage_name
+        tests: [not_null]
+      - name: amount
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              severity: warn
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__opportunity_line_items
+    description: Cleaned Salesforce OpportunityLineItem records.
+    columns:
+      - name: opportunity_line_item_id
+        tests: [not_null, unique]
+      - name: opportunity_id
+        tests: [not_null]
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__campaigns
+    description: Cleaned Salesforce Campaign records.
+    columns:
+      - name: campaign_id
+        tests: [not_null, unique]
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__campaign_members
+    description: Campaign membership junction (Lead or Contact per campaign).
+    columns:
+      - name: campaign_member_id
+        tests: [not_null, unique]
+      - name: campaign_id
+        tests: [not_null]
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__tasks
+    description: Activity tasks against any Salesforce object.
+    columns:
+      - name: task_id
+        tests: [not_null, unique]
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__events
+    description: Calendar events in Salesforce.
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+
+  # --------------------------------------------------------------------------
+  - name: stg_salesforce__users
+    description: Salesforce User records — reps and managers.
+    columns:
+      - name: user_id
+        tests: [not_null, unique]
+      - name: email
+        tests: [not_null, unique]
