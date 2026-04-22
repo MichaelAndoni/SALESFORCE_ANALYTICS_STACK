@@ -127,6 +127,9 @@ jobs:
   lint:
     name: SQL lint
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: salesforce_dbt
     steps:
       - uses: actions/checkout@v4
 
@@ -155,6 +158,9 @@ jobs:
     needs: [setup]
     if: needs.setup.outputs.is_pr == 'true'
     environment: dev
+    defaults:
+      run:
+        working-directory: salesforce_dbt
 
     steps:
       - uses: actions/checkout@v4
@@ -228,6 +234,9 @@ jobs:
     needs: [setup, lint]
     if: needs.setup.outputs.is_pr == 'false'
     environment: ${{ needs.setup.outputs.dbt_target }}
+    defaults:
+      run:
+        working-directory: salesforce_dbt
 
     steps:
       - uses: actions/checkout@v4
@@ -319,7 +328,7 @@ jobs:
           retention-days: 30
 
       - name: Notify on failure
-        if: failure()
+        if: failure() && secrets.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@v1
         with:
           payload: |
