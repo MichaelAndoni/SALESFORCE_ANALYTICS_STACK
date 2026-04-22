@@ -141,12 +141,34 @@ jobs:
       - name: Install sqlfluff
         run: pip install sqlfluff sqlfluff-templater-dbt dbt-snowflake==${{ env.DBT_VERSION }}
 
+      - name: Write profiles.yml for sqlfluff
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml << 'EOF'
+          salesforce_dbt:
+            target: dev
+            outputs:
+              dev:
+                type:      snowflake
+                account:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+                user:      ${{ secrets.SNOWFLAKE_USER }}
+                password:  ${{ secrets.SNOWFLAKE_PASSWORD }}
+                role:      TRANSFORMER
+                database:  ANALYTICS
+                warehouse: TRANSFORMING
+                schema:    lint_temp
+                threads:   1
+          EOF
+
+      - name: dbt deps (for sqlfluff templater)
+        run: dbt deps
+
       - name: Lint SQL
         run: |
           sqlfluff lint models/ macros/ snapshots/ \
             --dialect snowflake \
             --templater dbt \
-            --exclude-rules L016,L036   # line length, select wildcards
+            --exclude-rules L016,L036
         continue-on-error: true   # lint failures warn but don't block deploys
 
   # --------------------------------------------------------------------------
