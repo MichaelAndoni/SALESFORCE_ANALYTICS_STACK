@@ -36,7 +36,7 @@ final as (
     c.email,
     c.phone,
     c.mobile_phone,
-    c.linkedin_url,
+    null                                                  as linkedin_url,
     c.lead_source,
 
     -- Address
@@ -45,8 +45,8 @@ final as (
     c.mailing_country,
 
     -- Opt-out flags
-    c.has_opted_out_of_email,
-    c.do_not_call,
+    null                                                  as has_opted_out_of_email,
+    null                                                  as do_not_call,
 
     -- Ownership
     c.owner_id,
@@ -58,7 +58,7 @@ final as (
     c.last_modified_at,
     c.updated_at,
     c.last_activity_date,
-    c.birth_date,
+    null                                                  as birth_date,
 
     current_timestamp() as dbt_updated_at
 

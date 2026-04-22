@@ -20,7 +20,7 @@ campaigns as (
     campaign_id,
     campaign_name,
     campaign_type,
-    channel
+    null as channel
   from {{ ref('stg_salesforce__campaigns') }}
 ),
 
@@ -57,8 +57,8 @@ enriched as (
     l.lead_source,
     l.status,
     l.rating,
-    l.lead_score,
-    l.lead_grade,
+    null                                                  as lead_score,
+    null                                                  as lead_grade,
     l.city,
     l.state,
     l.country,
@@ -83,10 +83,10 @@ enriched as (
     u.owner_department,
 
     -- ── Original campaign attribution ─────────────────────────────────────
-    l.original_campaign_id,
-    c_orig.campaign_name                                  as original_campaign_name,
-    c_orig.campaign_type                                  as original_campaign_type,
-    c_orig.channel                                        as original_campaign_channel,
+    null                                                  as original_campaign_id,
+    null                                                  as original_campaign_name,
+    null                                                  as original_campaign_type,
+    null                                                  as original_campaign_channel,
 
     -- ── Most recent campaign touch ─────────────────────────────────────────
     lcm.last_campaign_id,
@@ -96,7 +96,6 @@ enriched as (
 
   from leads l
   left join users      u     on l.owner_id             = u.user_id
-  left join campaigns  c_orig on l.original_campaign_id = c_orig.campaign_id
   left join latest_campaign_membership lcm
     on l.lead_id = lcm.lead_id and lcm.rn = 1
   left join campaigns c_last on lcm.last_campaign_id   = c_last.campaign_id

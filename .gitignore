@@ -1,0 +1,26 @@
+# CDK build output — contains deeply nested paths that exceed Windows MAX_PATH
+salesforce_ingest/cdk/cdk.out/
+
+# CDK outputs (contain account/region info)
+salesforce_ingest/cdk/cdk-outputs.json
+
+# Secrets
+salesforce_ingest/cdk/secret_*
+salesforce_ingest/sf_private_key.pem
+
+# Logs
+logs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# dbt local user config
+salesforce_dbt/.user.yml
+salesforce_dbt/package-lock.yml
+
+# OS
+.DS_Store
+Thumbs.db

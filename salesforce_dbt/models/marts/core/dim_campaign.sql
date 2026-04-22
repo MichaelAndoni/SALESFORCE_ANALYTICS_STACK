@@ -55,10 +55,10 @@ final as (
     c.number_sent,
 
     -- UTM / channel
-    c.utm_source,
-    c.utm_medium,
-    c.utm_content,
-    c.channel,
+    null                                                  as utm_source,
+    null                                                  as utm_medium,
+    null                                                  as utm_content,
+    null                                                  as channel,
 
     -- Flags
     c.is_active,

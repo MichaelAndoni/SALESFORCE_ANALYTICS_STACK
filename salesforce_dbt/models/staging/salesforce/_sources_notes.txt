@@ -1,0 +1,16 @@
+-- models/staging/salesforce/_sources.yml
+--
+-- Source definitions for the AWS-native Lambda → S3 → Snowpipe pipeline.
+--
+-- These sources point at DEDUPLICATION VIEWS (V_*) in RAW.SALESFORCE,
+-- NOT the underlying append-only tables.  The views return exactly one row
+-- per Salesforce ID (latest SYSTEMMODSTAMP wins), so dbt staging models never
+-- see duplicate rows from Snowpipe's append-only load strategy.
+--
+-- Freshness is checked on _LOAD_TIMESTAMP (Snowpipe ingest time).
+-- Lambda runs hourly; warn after 2 hours (one missed run), error after 6.
+--
+-- If you are using Fivetran/Airbyte instead of the custom Lambda pipeline:
+--   • Change identifier: V_ACCOUNT → account  (remove identifier: lines)
+--   • Change loaded_at_field: _load_timestamp → _fivetran_synced
+--   • Add _fivetran_deleted filter back to staging models

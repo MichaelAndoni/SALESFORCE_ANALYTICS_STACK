@@ -53,7 +53,7 @@ PAGE_SIZE      = 50_000  # rows per result page
 OBJECT_QUERIES: dict[str, str] = {
     "Account": """
         SELECT
-            Id, Name, Type, Industry, Sub_Industry__c, Rating, AccountSource,
+            Id, Name, Type, Industry, Rating, AccountSource,
             Description, Website, Phone, Fax,
             AnnualRevenue, NumberOfEmployees,
             BillingStreet, BillingCity, BillingState, BillingPostalCode,
@@ -69,10 +69,9 @@ OBJECT_QUERIES: dict[str, str] = {
         SELECT
             Id, FirstName, LastName, Name, Salutation, Title, Department,
             AccountId, ReportsToId, OwnerId,
-            Email, Phone, MobilePhone, Fax, LinkedIn_URL__c,
+            Email, Phone, MobilePhone, Fax,
             LeadSource, MailingStreet, MailingCity, MailingState,
             MailingPostalCode, MailingCountry,
-            HasOptedOutOfEmail, DoNotCall, Birthdate,
             IsDeleted, CreatedDate, LastModifiedDate, SystemModstamp,
             LastActivityDate
         FROM Contact
@@ -89,8 +88,7 @@ OBJECT_QUERIES: dict[str, str] = {
             Street, City, State, PostalCode, Country,
             IsConverted, ConvertedDate, ConvertedAccountId,
             ConvertedContactId, ConvertedOpportunityId,
-            OwnerId, CampaignId, HasOptedOutOfEmail, DoNotCall,
-            Lead_Score__c, Lead_Grade__c,
+            OwnerId,
             IsDeleted, CreatedDate, LastModifiedDate, SystemModstamp,
             LastActivityDate
         FROM Lead
@@ -104,9 +102,6 @@ OBJECT_QUERIES: dict[str, str] = {
             StageName, ForecastCategory, Amount, ExpectedRevenue, Probability,
             TotalOpportunityQuantity, CloseDate, FiscalQuarter, FiscalYear,
             IsClosed, IsWon, HasOpportunityLineItem, LeadSource,
-            Competitor__c, Reason_Won_Lost__c,
-            ARR__c, MRR__c, TCV__c,
-            Contract_Start_Date__c, Contract_End_Date__c, Contract_Term_Months__c,
             IsDeleted, CreatedDate, LastModifiedDate, SystemModstamp,
             LastActivityDate
         FROM Opportunity
@@ -118,7 +113,7 @@ OBJECT_QUERIES: dict[str, str] = {
         SELECT
             Id, OpportunityId, Product2Id, PricebookEntryId,
             Name, ProductCode, Description, Quantity, UnitPrice,
-            ListPrice, TotalPrice, Discount, Revenue_Type__c, ServiceDate,
+            ListPrice, TotalPrice, ServiceDate,
             SortOrder, IsDeleted, CreatedDate, SystemModstamp
         FROM OpportunityLineItem
         WHERE SystemModstamp >= {watermark}
@@ -133,7 +128,6 @@ OBJECT_QUERIES: dict[str, str] = {
             NumberOfLeads, NumberOfConvertedLeads, NumberOfContacts,
             NumberOfResponses, NumberOfOpportunities, NumberOfWonOpportunities,
             AmountAllOpportunities, AmountWonOpportunities,
-            UTM_Source__c, UTM_Medium__c, UTM_Content__c, Channel__c,
             IsActive, IsDeleted, CreatedDate, LastModifiedDate, SystemModstamp
         FROM Campaign
         WHERE SystemModstamp >= {watermark}
@@ -152,9 +146,8 @@ OBJECT_QUERIES: dict[str, str] = {
 
     "Task": """
         SELECT
-            Id, Subject, Type, Status, Priority, WhoId, WhatId, OwnerId,
-            ActivityDate, Description, CallType, CallDurationInSeconds,
-            CallDisposition, IsHighPriority,
+            Id, Subject, Status, Priority, WhoId, WhatId, OwnerId,
+            ActivityDate, Description, IsHighPriority,
             IsDeleted, CreatedDate, LastModifiedDate, SystemModstamp
         FROM Task
         WHERE SystemModstamp >= {watermark}
@@ -163,7 +156,7 @@ OBJECT_QUERIES: dict[str, str] = {
 
     "Event": """
         SELECT
-            Id, Subject, Type, WhoId, WhatId, OwnerId,
+            Id, Subject, WhoId, WhatId, OwnerId,
             ActivityDateTime, EndDateTime, DurationInMinutes,
             Location, Description, IsAllDayEvent, IsPrivate,
             IsDeleted, CreatedDate, LastModifiedDate, SystemModstamp
@@ -178,7 +171,7 @@ OBJECT_QUERIES: dict[str, str] = {
             Title, Department, Division, Phone, MobilePhone,
             ManagerId, UserRoleId, ProfileId,
             TimeZoneSidKey, LocaleSidKey,
-            IsActive, IsDeleted, CreatedDate, LastModifiedDate,
+            IsActive, CreatedDate, LastModifiedDate,
             SystemModstamp, LastLoginDate
         FROM User
         WHERE SystemModstamp >= {watermark}

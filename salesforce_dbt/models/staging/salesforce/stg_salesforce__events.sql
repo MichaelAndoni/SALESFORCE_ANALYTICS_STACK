@@ -11,7 +11,7 @@ with source as (
   select * from {{ source('salesforce', 'event') }}
 
   {% if is_incremental() %}
-    where system_modstamp >= (
+    where systemmodstamp >= (
       select dateadd('day', -{{ var('incremental_lookback_days') }},
                      max(updated_at))
       from {{ this }}
@@ -25,36 +25,32 @@ cleaned as (
   select
     id                                                    as event_id,
     subject,
-    type                                                  as event_type,
 
     -- ── Who / What ────────────────────────────────────────────────────────
-    who_id,
-    what_id,
-    owner_id,
+    whoid                                              as who_id,
+    whatid                                             as what_id,
+    ownerid                                            as owner_id,
 
     -- ── Schedule ──────────────────────────────────────────────────────────
-    activity_date_time::timestamp_ntz                     as start_datetime,
-    end_date_time::timestamp_ntz                          as end_datetime,
-    duration_in_minutes::integer                          as duration_minutes,
+    activitydatetime::timestamp_ntz                     as start_datetime,
+    enddatetime::timestamp_ntz                          as end_datetime,
+    durationinminutes::integer                          as duration_minutes,
     location,
     description,
 
     -- ── Flags ─────────────────────────────────────────────────────────────
-    is_all_day_event::boolean                             as is_all_day,
-    is_private::boolean                                   as is_private,
-    is_deleted::boolean                                   as is_deleted,
-    _fivetran_deleted::boolean                            as is_fivetran_deleted,
+    isalldayevent::boolean                             as is_all_day,
+    isprivate::boolean                                   as is_private,
+    isdeleted::boolean                                   as is_deleted,
 
     -- ── Timestamps ────────────────────────────────────────────────────────
-    created_date::timestamp_ntz                           as created_at,
-    last_modified_date::timestamp_ntz                     as last_modified_at,
-    system_modstamp::timestamp_ntz                        as updated_at,
-    _fivetran_synced::timestamp_ntz                       as fivetran_synced_at
+    createddate::timestamp_ntz                           as created_at,
+    lastmodifieddate::timestamp_ntz                     as last_modified_at,
+    systemmodstamp::timestamp_ntz                        as updated_at
 
   from source
 
-  where coalesce(is_deleted, false) = false
-    and coalesce(_fivetran_deleted, false) = false
+  where coalesce(isdeleted, false) = false
 
 )
 

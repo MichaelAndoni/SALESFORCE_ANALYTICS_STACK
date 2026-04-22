@@ -38,7 +38,7 @@ campaigns as (
     campaign_id,
     campaign_name,
     campaign_type,
-    channel
+    null as channel
   from {{ ref('stg_salesforce__campaigns') }}
 ),
 
@@ -48,10 +48,9 @@ line_item_agg as (
     opportunity_id,
     count(*)                    as line_item_count,
     sum(total_price)            as line_items_total,
-    sum(case when revenue_type = 'ARR'      then total_price else 0 end) as arr_line_items,
-    sum(case when revenue_type = 'Services' then total_price else 0 end) as services_line_items,
-    listagg(distinct product_name, ', ')
-      within group (order by sort_order)                                  as products_purchased
+    cast(null as number(38, 2))                                          as arr_line_items,
+    cast(null as number(38, 2))                                          as services_line_items,
+    listagg(distinct product_name, ', ')                                  as products_purchased
   from {{ ref('stg_salesforce__opportunity_line_items') }}
   group by 1
 ),
@@ -68,12 +67,12 @@ enriched as (
     o.expected_revenue,
     o.probability_pct,
     o.total_quantity,
-    o.arr,
-    o.mrr,
-    o.tcv,
+    null                                                  as arr,
+    null                                                  as mrr,
+    null                                                  as tcv,
     o.lead_source,
-    o.primary_competitor,
-    o.reason_won_lost,
+    null                                                  as primary_competitor,
+    null                                                  as reason_won_lost,
     o.is_closed,
     o.is_won,
     o.is_lost,
@@ -85,9 +84,9 @@ enriched as (
     o.fiscal_year,
     o.created_at,
     o.updated_at,
-    o.contract_start_date,
-    o.contract_end_date,
-    o.contract_term_months,
+    null                                                  as contract_start_date,
+    null                                                  as contract_end_date,
+    null                                                  as contract_term_months,
     -- Age of the opportunity in days (from create to close or today)
     datediff('day', o.created_at,
              coalesce(case when o.is_closed then o.close_date end,
@@ -113,7 +112,7 @@ enriched as (
     o.campaign_id,
     c.campaign_name,
     c.campaign_type,
-    c.channel                                             as campaign_channel,
+    null                                                  as campaign_channel,
 
     -- ── Line item aggregates ──────────────────────────────────────────
     coalesce(li.line_item_count, 0)                       as line_item_count,

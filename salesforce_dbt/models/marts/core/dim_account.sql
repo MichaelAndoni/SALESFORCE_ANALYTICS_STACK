@@ -52,7 +52,7 @@ final as (
     a.account_name,
     a.account_type,
     a.industry,
-    a.sub_industry,
+    null                                                  as sub_industry,
     a.rating,
     a.account_source,
     a.website,

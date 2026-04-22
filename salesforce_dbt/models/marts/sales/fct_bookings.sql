@@ -92,12 +92,10 @@ final as (
     da.revenue_segment,
 
     -- ── Owner context ─────────────────────────────────────────────────────
-    o.owner_id,
     o.owner_name,
     o.owner_department,
 
     -- ── Campaign attribution ──────────────────────────────────────────────
-    o.campaign_id,
     o.campaign_name,
     o.campaign_type,
     o.campaign_channel,

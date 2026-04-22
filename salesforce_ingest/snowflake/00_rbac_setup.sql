@@ -124,6 +124,8 @@ GRANT CREATE SCHEMA ON DATABASE ANALYTICS_DEV TO ROLE TRANSFORMER_DEV;
 
 -- ── Service account users ────────────────────────────────────────────────────
 
+USE ROLE ACCOUNTADMIN;
+
 -- Lambda / Snowpipe service account
 CREATE USER IF NOT EXISTS SVC_LOADER
     DEFAULT_ROLE      = LOADER

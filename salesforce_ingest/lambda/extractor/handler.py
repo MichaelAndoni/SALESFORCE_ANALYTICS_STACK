@@ -31,13 +31,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import traceback
 from datetime import datetime, timezone
 from typing import Any
 
 import boto3
 
-from salesforce_client import SalesforceClient, OBJECT_QUERIES
+from salesforce_client import SalesforceClient, SalesforceBulkError, OBJECT_QUERIES
 from watermark import WatermarkManager
 
 # ---------------------------------------------------------------------------
@@ -125,59 +126,85 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     # ── Extract each object ───────────────────────────────────────────────
     results: dict[str, Any] = {}
+    MAX_RETRIES   = 2
+    RETRY_BACKOFF = [30, 90]   # seconds to wait before retry 1, retry 2
 
     for sf_object in objects_to_run:
         obj_result: dict[str, Any] = {
-            "status":   "pending",
-            "records":  0,
+            "status":         "pending",
+            "records":        0,
             "watermark_used": None,
-            "error":    None,
+            "attempts":       0,
+            "error":          None,
         }
 
-        try:
-            # Resolve watermark
-            if backfill_start:
-                # Manual backfill — ignore stored watermark
-                wm = datetime.fromisoformat(backfill_start.replace("Z", "+00:00"))
-                log.info("[%s] Backfill override: %s", sf_object, wm.isoformat())
-            else:
-                wm = wm_manager.get(sf_object)
-                wm = wm_manager.apply_lookback(wm, LOOKBACK_MINUTES)
+        # Resolve watermark once — shared across retry attempts
+        if backfill_start:
+            wm = datetime.fromisoformat(backfill_start.replace("Z", "+00:00"))
+            log.info("[%s] Backfill override: %s", sf_object, wm.isoformat())
+        else:
+            wm = wm_manager.get(sf_object)
+            wm = wm_manager.apply_lookback(wm, LOOKBACK_MINUTES)
 
-            obj_result["watermark_used"] = wm.isoformat()
+        obj_result["watermark_used"] = wm.isoformat()
 
-            if dry_run:
-                log.info("[%s] DRY RUN — would extract from %s", sf_object, wm.isoformat())
-                obj_result["status"] = "dry_run"
-                results[sf_object]   = obj_result
-                continue
+        if dry_run:
+            log.info("[%s] DRY RUN — would extract from %s", sf_object, wm.isoformat())
+            obj_result["status"] = "dry_run"
+            results[sf_object]   = obj_result
+            continue
 
-            # Extract and write to S3
-            record_count = sf_client.extract_object(
-                sf_object=sf_object,
-                watermark=wm,
-                s3_client=s3_client,
-                s3_bucket=S3_BUCKET,
-                s3_prefix=S3_PREFIX,
-                run_ts=run_ts,
-            )
+        for attempt in range(MAX_RETRIES + 1):
+            obj_result["attempts"] = attempt + 1
+            try:
+                record_count = sf_client.extract_object(
+                    sf_object=sf_object,
+                    watermark=wm,
+                    s3_client=s3_client,
+                    s3_bucket=S3_BUCKET,
+                    s3_prefix=S3_PREFIX,
+                    run_ts=run_ts,
+                )
 
-            # Only advance watermark if records were successfully written
-            # Use run_ts (not max SystemModstamp) to avoid gaps when Salesforce
-            # returns no records in a window — the lookback buffer covers this.
-            if not backfill_start:
-                wm_manager.set(sf_object, run_ts)
+                # Advance watermark only on success and not in backfill mode
+                if not backfill_start:
+                    wm_manager.set(sf_object, run_ts)
 
-            obj_result["status"]  = "success"
-            obj_result["records"] = record_count
+                obj_result["status"]  = "success"
+                obj_result["records"] = record_count
+                break   # success — stop retrying
 
-        except Exception as e:
-            log.error("[%s] FAILED: %s", sf_object, e)
-            log.error(traceback.format_exc())
-            obj_result["status"] = "error"
-            obj_result["error"]  = str(e)
-            # Do NOT update watermark on failure — next run will retry from last
-            # successful watermark automatically
+            except SalesforceBulkError as e:
+                if "[400]" in str(e):
+                    # Bad SOQL — retrying will never fix it; fail immediately
+                    log.error("[%s] Bad SOQL (400), will not retry: %s", sf_object, e)
+                    obj_result["status"] = "error"
+                    obj_result["error"]  = str(e)
+                    break
+                if attempt < MAX_RETRIES:
+                    delay = RETRY_BACKOFF[attempt]
+                    log.warning("[%s] Attempt %d failed, retrying in %ds: %s",
+                                sf_object, attempt + 1, delay, e)
+                    time.sleep(delay)
+                else:
+                    log.error("[%s] FAILED after %d attempts: %s",
+                              sf_object, attempt + 1, e)
+                    log.error(traceback.format_exc())
+                    obj_result["status"] = "error"
+                    obj_result["error"]  = str(e)
+
+            except Exception as e:
+                if attempt < MAX_RETRIES:
+                    delay = RETRY_BACKOFF[attempt]
+                    log.warning("[%s] Attempt %d failed, retrying in %ds: %s",
+                                sf_object, attempt + 1, delay, e)
+                    time.sleep(delay)
+                else:
+                    log.error("[%s] FAILED after %d attempts: %s",
+                              sf_object, attempt + 1, e)
+                    log.error(traceback.format_exc())
+                    obj_result["status"] = "error"
+                    obj_result["error"]  = str(e)
 
         results[sf_object] = obj_result
 
@@ -196,10 +223,10 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     log.info("=== Run complete. Total records: %d. Failures: %s ===",
              total_records, failures or "none")
 
-    # Raise if any object failed — lets EventBridge/Step Functions detect errors
+    # Log a clear ERROR line for any failures so a CloudWatch metric filter
+    # can trigger an alarm — but do NOT raise, which would cause Lambda to
+    # retry the entire function and re-run objects that already succeeded.
     if failures:
-        raise RuntimeError(
-            f"Extract failed for: {failures}. See CloudWatch logs for details."
-        )
+        log.error("EXTRACT_FAILURES objects=%s", failures)
 
     return summary

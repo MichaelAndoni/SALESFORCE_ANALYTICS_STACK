@@ -56,7 +56,7 @@ opp_agg as (
     sum(amount)                                           as total_pipeline_amount,
     sum(case when not is_closed then amount else 0 end)  as open_pipeline_amount,
     sum(case when is_won        then amount else 0 end)  as won_amount,
-    sum(case when is_won        then arr    else 0 end)  as won_arr,
+    cast(null as number(38, 2))                          as won_arr,
     min(case when is_won        then close_date end)      as first_won_date,
     max(case when is_won        then close_date end)      as last_won_date
   from opportunities
@@ -74,9 +74,9 @@ final as (
     c.campaign_name,
     c.campaign_type,
     c.campaign_status,
-    c.channel,
-    c.utm_source,
-    c.utm_medium,
+    null                                                  as channel,
+    null                                                  as utm_source,
+    null                                                  as utm_medium,
 
     -- ── Schedule ──────────────────────────────────────────────────────────
     c.start_date,

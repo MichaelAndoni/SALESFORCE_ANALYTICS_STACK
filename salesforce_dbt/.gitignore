@@ -22,3 +22,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# creds
+salesforce_ingest/secret_temp.json
+salesforce_ingest/sf_private_key.pem

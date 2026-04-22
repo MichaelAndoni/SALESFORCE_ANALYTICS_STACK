@@ -41,7 +41,7 @@ CREATE OR REPLACE FILE FORMAT FF_SALESFORCE_NDJSON
 -- Snowpipe will list this stage to discover files (supplemented by SQS events).
 CREATE OR REPLACE STAGE STG_SALESFORCE_LANDING
     STORAGE_INTEGRATION = SF_S3_INTEGRATION
-    URL                 = 's3://sf-ingest-prod-landing-ACCOUNT_ID/salesforce/raw/'
+    URL                 = 's3://sf-ingest-dev-landing-732341677246/salesforce/raw/'
     FILE_FORMAT         = FF_SALESFORCE_NDJSON
     COMMENT             = 'External stage pointing at Lambda S3 landing prefix';
 

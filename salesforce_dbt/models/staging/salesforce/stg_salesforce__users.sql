@@ -11,7 +11,7 @@ with source as (
   select * from {{ source('salesforce', 'user') }}
 
   {% if is_incremental() %}
-    where system_modstamp >= (
+    where systemmodstamp >= (
       select dateadd('day', -{{ var('incremental_lookback_days') }},
                      max(updated_at))
       from {{ this }}
@@ -26,8 +26,8 @@ cleaned as (
     id                                                    as user_id,
 
     -- ── Identity ──────────────────────────────────────────────────────────
-    first_name,
-    last_name,
+    firstname                                          as first_name,
+    lastname                                           as last_name,
     name                                                  as full_name,
     email,
     username,
@@ -36,32 +36,28 @@ cleaned as (
     department,
     division,
     phone,
-    mobile_phone,
+    mobilephone                                        as mobile_phone,
 
     -- ── Org hierarchy ─────────────────────────────────────────────────────
-    manager_id,
-    user_role_id,
-    profile_id,
+    managerid                                          as manager_id,
+    userroleid                                         as user_role_id,
+    profileid                                          as profile_id,
 
     -- ── Locale ────────────────────────────────────────────────────────────
-    time_zone_sid_key                                     as timezone,
-    locale_sid_key                                        as locale,
+    timezonesidkey                                     as timezone,
+    localesidkey                                        as locale,
 
     -- ── Flags ─────────────────────────────────────────────────────────────
-    is_active::boolean                                    as is_active,
-    is_deleted::boolean                                   as is_deleted,
-    _fivetran_deleted::boolean                            as is_fivetran_deleted,
+    isactive::boolean                                    as is_active,
 
     -- ── Timestamps ────────────────────────────────────────────────────────
-    created_date::timestamp_ntz                           as created_at,
-    last_modified_date::timestamp_ntz                     as last_modified_at,
-    system_modstamp::timestamp_ntz                        as updated_at,
-    last_login_date::timestamp_ntz                        as last_login_at,
-    _fivetran_synced::timestamp_ntz                       as fivetran_synced_at
+    createddate::timestamp_ntz                           as created_at,
+    lastmodifieddate::timestamp_ntz                     as last_modified_at,
+    systemmodstamp::timestamp_ntz                        as updated_at,
+    lastlogindate::timestamp_ntz                        as last_login_at
 
   from source
 
-  where coalesce(_fivetran_deleted, false) = false
   -- NOTE: We keep inactive users so historical records retain rep names
 
 )

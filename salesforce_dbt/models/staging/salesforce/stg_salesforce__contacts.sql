@@ -11,7 +11,7 @@ with source as (
   select * from {{ source('salesforce', 'contact') }}
 
   {% if is_incremental() %}
-    where system_modstamp >= (
+    where systemmodstamp >= (
       select dateadd('day', -{{ var('incremental_lookback_days') }},
                      max(updated_at))
       from {{ this }}
@@ -27,8 +27,8 @@ cleaned as (
     id                                                    as contact_id,
 
     -- ── Name ──────────────────────────────────────────────────────────────
-    first_name,
-    last_name,
+    firstname                                          as first_name,
+    lastname                                           as last_name,
     name                                                  as full_name,
     salutation,
 
@@ -37,47 +37,38 @@ cleaned as (
     department,
 
     -- ── Relationships ─────────────────────────────────────────────────────
-    account_id,
-    reports_to_id,
-    owner_id,
+    accountid                                          as account_id,
+    reportstoid                                        as reports_to_id,
+    ownerid                                            as owner_id,
 
     -- ── Contact details ───────────────────────────────────────────────────
     email,
     phone,
-    mobile_phone,
+    mobilephone                                        as mobile_phone,
     fax,
-    linkedin_url__c                                       as linkedin_url,
 
     -- ── Lead source (how this person was originally acquired) ──────────────
-    lead_source,
+    leadsource                                         as lead_source,
 
     -- ── Mailing address ───────────────────────────────────────────────────
-    mailing_street,
-    mailing_city,
-    mailing_state,
-    mailing_postal_code,
-    mailing_country,
-
-    -- ── Marketing / engagement flags ──────────────────────────────────────
-    has_opted_out_of_email::boolean                       as has_opted_out_of_email,
-    do_not_call::boolean                                  as do_not_call,
+    mailingstreet                                      as mailing_street,
+    mailingcity                                        as mailing_city,
+    mailingstate                                       as mailing_state,
+    mailingpostalcode                                  as mailing_postal_code,
+    mailingcountry                                     as mailing_country,
 
     -- ── Flags ─────────────────────────────────────────────────────────────
-    is_deleted::boolean                                   as is_deleted,
-    _fivetran_deleted::boolean                            as is_fivetran_deleted,
+    isdeleted::boolean                                   as is_deleted,
 
     -- ── Timestamps ────────────────────────────────────────────────────────
-    birthdate::date                                       as birth_date,
-    created_date::timestamp_ntz                           as created_at,
-    last_modified_date::timestamp_ntz                     as last_modified_at,
-    system_modstamp::timestamp_ntz                        as updated_at,
-    last_activity_date::date                              as last_activity_date,
-    _fivetran_synced::timestamp_ntz                       as fivetran_synced_at
+    createddate::timestamp_ntz                           as created_at,
+    lastmodifieddate::timestamp_ntz                     as last_modified_at,
+    systemmodstamp::timestamp_ntz                        as updated_at,
+    lastactivitydate::date                              as last_activity_date
 
   from source
 
-  where coalesce(is_deleted, false) = false
-    and coalesce(_fivetran_deleted, false) = false
+  where coalesce(isdeleted, false) = false
 
 )
 

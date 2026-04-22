@@ -14,7 +14,6 @@
 import argparse
 import json
 import os
-import sys
 from datetime import datetime, timezone
 
 import boto3
@@ -100,27 +99,19 @@ def invoke_extractor(args):
         print("Aborted.")
         return
 
-    resp = lam.invoke(
+    resp   = lam.invoke(
         FunctionName=LAMBDA_FUNCTION,
-        InvocationType="RequestResponse",   # synchronous
+        InvocationType="Event",   # async — fire and forget; avoids local timeout
         Payload=json.dumps(payload).encode(),
     )
+    status = resp["StatusCode"]
 
-    result   = json.loads(resp["Payload"].read())
-    status   = resp["StatusCode"]
-    fn_error = resp.get("FunctionError")
-
-    if fn_error:
-        print(f"❌ Lambda error ({fn_error}):")
-        print(json.dumps(result, indent=2))
-        sys.exit(1)
+    if status == 202:
+        print(f"\n✅ Lambda invoked (HTTP {status}) — running asynchronously in AWS.")
+        print("   Tail the logs to watch progress:")
+        print(f"   aws logs tail /aws/lambda/{LAMBDA_FUNCTION} --follow")
     else:
-        print(f"\n✅ Extractor completed (HTTP {status})")
-        print(f"   Total records: {result.get('total_records', 'n/a')}")
-        print(f"   Failures:      {result.get('failures') or 'none'}")
-        for obj, r in result.get("results", {}).items():
-            status_icon = "✅" if r["status"] == "success" else "❌"
-            print(f"   {status_icon} {obj:<30} {r.get('records', 0):>8,} records")
+        print(f"❌ Unexpected status: {status}")
 
 
 def backfill(args):
