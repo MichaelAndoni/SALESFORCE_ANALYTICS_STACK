@@ -108,4 +108,8 @@ models:
       - name: user_id
         tests: [not_null, unique]
       - name: email
-        tests: [not_null, unique]
+        tests:
+          - not_null
+          - unique:
+              config:
+                severity: warn   # dev orgs sometimes share email across users

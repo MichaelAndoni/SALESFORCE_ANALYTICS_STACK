@@ -16,12 +16,11 @@
     {{ default_schema }}
 
   {%- elif target.name == 'prod' -%}
-    -- In prod: use the custom schema name directly (no prefix)
+    {#- In prod: use the custom schema name directly (no prefix) -#}
     {{ custom_schema_name | trim | upper }}
 
   {%- else -%}
-    -- In dev/ci: prefix with the developer's personal schema so sandboxes
-    -- never collide with production schemas
+    {#- In dev/ci: prefix with the developer's personal schema so sandboxes never collide -#}
     {{ default_schema | trim | upper }}_{{ custom_schema_name | trim | upper }}
 
   {%- endif -%}

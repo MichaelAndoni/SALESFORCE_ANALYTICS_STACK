@@ -1,8 +1,12 @@
 -- models/marts/core/dim_date.sql
 --
 -- Calendar dimension covering the full analytical date range.
--- Built using dbt_date's get_date_dimension macro for Snowflake.
--- Materialized as a TABLE (tiny, static-ish, fast joins).
+-- Uses Snowflake's native GENERATOR function — no recursive CTEs,
+-- works on Snowflake Standard edition.
+
+{%- set start = modules.datetime.datetime.strptime(var('date_spine_start'), '%Y-%m-%d').date() -%}
+{%- set end   = modules.datetime.datetime.strptime(var('date_spine_end'),   '%Y-%m-%d').date() -%}
+{%- set n_days = (end - start).days + 1 -%}
 
 {{
   config(materialized = 'table')
@@ -10,12 +14,9 @@
 
 with date_spine as (
 
-  {{
-    dbt_date.get_date_dimension(
-      var('date_spine_start'),
-      var('date_spine_end')
-    )
-  }}
+  select
+    dateadd(day, seq4(), '{{ var("date_spine_start") }}'::date) as date_day
+  from table(generator(rowcount => {{ n_days }}))
 
 ),
 
@@ -23,60 +24,65 @@ enhanced as (
 
   select
     -- ── Primary key ───────────────────────────────────────────────────────
-    date_day                                              as date_id,          -- YYYY-MM-DD date, used as FK in fact tables
+    date_day                                              as date_id,
 
     -- ── Calendar attributes ───────────────────────────────────────────────
     date_day,
-    prior_date_day                                        as prior_date,
-    next_date_day                                         as next_date,
+    dateadd(day, -1, date_day)::date                      as prior_date,
+    dateadd(day,  1, date_day)::date                      as next_date,
 
-    day_of_week,
-    day_of_week_name,
-    day_of_week_name_short,
-    day_of_month,
-    day_of_year,
+    dayofweekiso(date_day)                                as day_of_week,
+    decode(dayofweekiso(date_day),
+      1,'Monday', 2,'Tuesday', 3,'Wednesday', 4,'Thursday',
+      5,'Friday', 6,'Saturday', 7,'Sunday'
+    )                                                     as day_of_week_name,
+    dayname(date_day)                                     as day_of_week_name_short,
+    dayofmonth(date_day)                                  as day_of_month,
+    dayofyear(date_day)                                   as day_of_year,
 
-    week_of_year,
-    week_start_date,
-    week_end_date,
+    weekofyear(date_day)                                  as week_of_year,
+    date_trunc('week',  date_day)::date                   as week_start_date,
+    dateadd(day, 6, date_trunc('week', date_day))::date   as week_end_date,
 
-    month_of_year,
-    month_name,
-    month_name_short,
-    month_start_date,
-    month_end_date,
+    month(date_day)                                       as month_of_year,
+    decode(month(date_day),
+      1,'January', 2,'February', 3,'March',    4,'April',
+      5,'May',     6,'June',     7,'July',     8,'August',
+      9,'September', 10,'October', 11,'November', 12,'December'
+    )                                                     as month_name,
+    monthname(date_day)                                   as month_name_short,
+    date_trunc('month', date_day)::date                   as month_start_date,
+    last_day(date_day)                                    as month_end_date,
 
-    quarter_of_year,
-    quarter_start_date,
-    quarter_end_date,
+    quarter(date_day)                                     as quarter_of_year,
+    date_trunc('quarter', date_day)::date                 as quarter_start_date,
+    last_day(date_trunc('quarter', date_day), 'quarter')  as quarter_end_date,
 
-    year_number,
+    year(date_day)                                        as year_number,
 
-    -- ── Fiscal calendar (adjust offset to match your org's fiscal year) ────
-    -- Default assumes fiscal year = calendar year (offset 0).
-    -- If your fiscal year starts in February, set fiscal_month_offset = 1.
-    month_of_year                                         as fiscal_month,
-    quarter_of_year                                       as fiscal_quarter,
-    year_number                                           as fiscal_year,
-
-    -- Fiscal quarter label e.g. "FY2024-Q3"
-    'FY' || year_number::varchar || '-Q' || quarter_of_year::varchar
-                                                          as fiscal_quarter_label,
+    -- ── Fiscal calendar (offset = 0: fiscal year = calendar year) ─────────
+    month(date_day)                                       as fiscal_month,
+    quarter(date_day)                                     as fiscal_quarter,
+    year(date_day)                                        as fiscal_year,
+    'FY' || year(date_day)::varchar
+      || '-Q' || quarter(date_day)::varchar               as fiscal_quarter_label,
 
     -- ── Boolean flags ─────────────────────────────────────────────────────
-    is_weekend,
-    is_month_start,
-    is_month_end,
-    is_quarter_start,
-    is_quarter_end,
-    is_year_start,
-    is_year_end,
+    dayofweekiso(date_day) in (6, 7)                      as is_weekend,
+    date_day = date_trunc('month',   date_day)::date      as is_month_start,
+    date_day = last_day(date_day)                         as is_month_end,
+    date_day = date_trunc('quarter', date_day)::date      as is_quarter_start,
+    date_day = last_day(date_trunc('quarter', date_day), 'quarter')
+                                                          as is_quarter_end,
+    date_day = date_trunc('year',    date_day)::date      as is_year_start,
+    date_day = last_day(date_trunc('year', date_day), 'year')
+                                                          as is_year_end,
 
     -- ── Rolling period helpers (relative to today) ─────────────────────────
-    datediff('day',  date_day, current_date())            as days_ago,
-    datediff('week', date_day, current_date())            as weeks_ago,
-    datediff('month',date_day, current_date())            as months_ago,
-    datediff('year', date_day, current_date())            as years_ago,
+    datediff('day',   date_day, current_date())           as days_ago,
+    datediff('week',  date_day, current_date())           as weeks_ago,
+    datediff('month', date_day, current_date())           as months_ago,
+    datediff('year',  date_day, current_date())           as years_ago,
 
     (date_day <= current_date())                          as is_past_or_today,
     (date_day  = current_date())                          as is_today,
