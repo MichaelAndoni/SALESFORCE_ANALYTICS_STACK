@@ -185,9 +185,9 @@ jobs:
                 account:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
                 user:      ${{ secrets.SNOWFLAKE_USER }}
                 password:  ${{ secrets.SNOWFLAKE_PASSWORD }}
-                role:      TRANSFORMER_DEV
-                database:  ANALYTICS_DEV
-                warehouse: TRANSFORMING_DEV
+                role:      TRANSFORMER
+                database:  ANALYTICS
+                warehouse: TRANSFORMING
                 schema:    "dbt_ci_${{ github.event.number }}"
                 threads:   4
                 query_tag: "dbt_ci_pr_${{ github.event.number }}"
@@ -272,9 +272,9 @@ jobs:
                 account:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
                 user:      ${{ secrets.SNOWFLAKE_USER }}
                 password:  ${{ secrets.SNOWFLAKE_PASSWORD }}
-                role:      TRANSFORMER_DEV
-                database:  ANALYTICS_DEV
-                warehouse: TRANSFORMING_DEV
+                role:      TRANSFORMER
+                database:  ANALYTICS
+                warehouse: TRANSFORMING
                 schema:    dbt_dev
                 threads:   4
                 query_tag: "dbt_dev_${{ github.run_id }}"
