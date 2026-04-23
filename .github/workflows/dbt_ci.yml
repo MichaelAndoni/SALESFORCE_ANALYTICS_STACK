@@ -286,7 +286,7 @@ jobs:
                 role:      TRANSFORMER
                 database:  ANALYTICS
                 warehouse: TRANSFORMING
-                schema:    dbt_prod
+                schema:    public
                 threads:   8
                 query_tag: "dbt_scheduled_${{ github.run_id }}"
               dev:
